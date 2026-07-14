@@ -1,0 +1,14 @@
+{
+  "version": "0.0.1",
+  "configurations": [
+    {
+      "name": "weather-app",
+      "runtimeExecutable": "python",
+      "runtimeArgs": ["manage.py", "runserver", "0.0.0.0:8002"],
+      "port": 8002,
+      "env": {
+        "NEON_DATABASE_URL": "postgresql://neondb_owner:npg_DjH7lQTgbWd5@ep-misty-frost-ab8jqh6k-pooler.eu-west-2.aws.neon.tech/neondb?sslmode=require"
+      }
+    }
+  ]
+}

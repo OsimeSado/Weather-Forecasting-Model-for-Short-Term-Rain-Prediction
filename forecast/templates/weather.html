@@ -1,0 +1,525 @@
+{% load static %}
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>{% if city %}{{ city }} — Weather{% else %}Weather Forecast{% endif %}</title>
+
+    <link rel="preconnect" href="https://fonts.googleapis.com">
+    <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+    <link href="https://fonts.googleapis.com/css2?family=Inter:wght@300;400;500;600;700;800&display=swap" rel="stylesheet">
+
+    <link rel="stylesheet" href="https://unpkg.com/leaflet@1.9.4/dist/leaflet.css" />
+    <link rel="stylesheet" href="{% static 'css/style.css' %}">
+    <script src="https://cdn.jsdelivr.net/npm/chart.js@4.4.0/dist/chart.umd.min.js"></script>
+    <script src="https://unpkg.com/leaflet@1.9.4/dist/leaflet.js"></script>
+</head>
+<body class="weather-body {% if main_weather %}weather-{{ main_weather|lower }}{% endif %}">
+
+    <!-- Loading Overlay -->
+    <div class="loading-overlay" id="loadingOverlay">
+        <div class="loading-spinner"></div>
+        <p class="loading-text">Fetching weather data...</p>
+    </div>
+
+    <div class="container">
+
+        <!-- Header -->
+        <header class="app-header">
+            <div class="brand">
+                <span class="brand-mark">&#9680;</span>
+                <span class="brand-name">Skyline</span>
+            </div>
+            <p class="brand-tagline">Real-time weather, powered by ML</p>
+        </header>
+
+        <!-- Search -->
+        <section class="search-section">
+            <form method="POST" class="search-form" autocomplete="off" id="weatherForm">
+                {% csrf_token %}
+                <input type="hidden" name="lat" id="hiddenLat" value="">
+                <input type="hidden" name="lon" id="hiddenLon" value="">
+                <input type="hidden" name="display_name" id="hiddenDisplayName" value="">
+                <div class="search-wrapper">
+                    <svg class="search-icon" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
+                        <circle cx="11" cy="11" r="8"></circle>
+                        <line x1="21" y1="21" x2="16.65" y2="16.65"></line>
+                    </svg>
+                    <div class="search-input-container">
+                        <input
+                            type="text"
+                            name="city"
+                            id="cityInput"
+                            class="search-input"
+                            placeholder="Search any city in the world..."
+                            value="{{ location|default:'' }}"
+                        >
+                        <div class="autocomplete-dropdown" id="autocompleteDropdown"></div>
+                    </div>
+                    <button type="button" class="location-button" id="geolocateBtn" title="Use my current location">
+                        <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" width="20" height="20">
+                            <circle cx="12" cy="12" r="3"></circle>
+                            <path d="M12 2v3m0 14v3M2 12h3m14 0h3"></path>
+                        </svg>
+                    </button>
+                    <button type="submit" class="search-button">Forecast</button>
+                </div>
+            </form>
+
+            {% if error %}
+                <div class="error-banner">
+                    <span class="error-icon">!</span>
+                    <span>{{ error }}</span>
+                </div>
+            {% endif %}
+
+            <div class="broad-warning" id="broadWarning" style="display:none;">
+                <span class="warning-icon">&#9888;</span>
+                <span id="broadWarningText"></span>
+            </div>
+        </section>
+
+        {% if city %}
+        <!-- Map Section -->
+        <section class="map-card glass">
+            <div class="map-header">
+                <h2 class="map-title">Location Map</h2>
+                <p class="map-subtitle">{{ location }} &middot; {{ lat }}, {{ lon }}</p>
+            </div>
+            <div id="weatherMap" class="weather-map"></div>
+        </section>
+
+        <!-- Hero Weather Card -->
+        <section class="hero-card glass">
+            <div class="hero-meta">
+                <h1 class="hero-city">{{ city }}<span class="hero-country">, {{ country }}</span></h1>
+                <p class="hero-date">{{ date }}</p>
+            </div>
+
+            <div class="hero-main">
+                <div class="hero-temp-block">
+                    <img
+                        src="https://openweathermap.org/img/wn/{{ icon }}@4x.png"
+                        alt="{{ description }}"
+                        class="hero-icon"
+                    >
+                    <div class="hero-temp">
+                        <span class="temp-value">{{ current_temp }}</span>
+                        <span class="temp-unit">&deg;C</span>
+                    </div>
+                </div>
+
+                <div class="hero-summary">
+                    <p class="hero-desc">{{ description|title }}</p>
+                    <p class="hero-feels">Feels like <strong>{{ feels_like }}&deg;C</strong></p>
+                    <div class="hero-range">
+                        <span class="range-item">
+                            <span class="range-label">Min</span>
+                            <span class="range-value">{{ MinTemp }}&deg;</span>
+                        </span>
+                        <span class="range-divider"></span>
+                        <span class="range-item">
+                            <span class="range-label">Max</span>
+                            <span class="range-value">{{ MaxTemp }}&deg;</span>
+                        </span>
+                    </div>
+                </div>
+            </div>
+        </section>
+
+        <!-- Rain Prediction (ML) -->
+        <section class="prediction-card glass">
+            <div class="prediction-header">
+                <span class="prediction-tag">ML Forecast</span>
+                <h2 class="prediction-title">Rain in next 6 hours</h2>
+            </div>
+
+            <div class="prediction-body">
+                <div class="prediction-percent">
+                    <svg class="ring" viewBox="0 0 120 120">
+                        <circle class="ring-track" cx="60" cy="60" r="52"></circle>
+                        <circle
+                            class="ring-fill"
+                            cx="60"
+                            cy="60"
+                            r="52"
+                            stroke-dasharray="326.7"
+                            stroke-dashoffset="326.7"
+                            data-percent="{{ rain_probability }}"
+                        ></circle>
+                    </svg>
+                    <div class="ring-text">
+                        <span class="ring-number">{{ rain_probability }}<small>%</small></span>
+                        <span class="ring-label">Chance</span>
+                    </div>
+                </div>
+
+                <div class="prediction-info">
+                    <p class="prediction-verdict">
+                        Will it rain? <strong>{{ rain_prediction }}</strong>
+                    </p>
+                    <p class="prediction-meta">
+                        <span class="meta-pill">{{ model_type }}</span>
+                        <span class="meta-pill">{{ data_source }}</span>
+                    </p>
+                </div>
+            </div>
+        </section>
+
+        <!-- Stats Grid -->
+        <section class="stats-grid">
+            <div class="stat-card glass">
+                <div class="stat-icon-img">
+                    <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M12 2v6l3 3"/><circle cx="12" cy="14" r="8"/></svg>
+                </div>
+                <div class="stat-label">Humidity</div>
+                <div class="stat-value">{{ humidity }}<small>%</small></div>
+            </div>
+
+            <div class="stat-card glass">
+                <div class="stat-icon-img">
+                    <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M9.59 4.59A2 2 0 1 1 11 8H2m10.59 11.41A2 2 0 1 0 14 16H2m15.73-8.27A2.5 2.5 0 1 1 19.5 12H2"/></svg>
+                </div>
+                <div class="stat-label">Wind</div>
+                <div class="stat-value">{{ wind_speed }}<small>km/h</small></div>
+                <div class="stat-sub">{{ wind_direction }} &middot; {{ wind_deg }}&deg;</div>
+            </div>
+
+            <div class="stat-card glass">
+                <div class="stat-icon-img">
+                    <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M12 9a4 4 0 0 0-2 7.5"/><path d="M12 3v2m6.4 1.6-1.4 1.4M21 12h-2M6 12H4m2.6-5-1.4-1.4"/></svg>
+                </div>
+                <div class="stat-label">Pressure</div>
+                <div class="stat-value">{{ pressure }}<small>hPa</small></div>
+            </div>
+
+            <div class="stat-card glass">
+                <div class="stat-icon-img">
+                    <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M1 12s4-8 11-8 11 8 11 8-4 8-11 8-11-8-11-8z"/><circle cx="12" cy="12" r="3"/></svg>
+                </div>
+                <div class="stat-label">Visibility</div>
+                <div class="stat-value">{{ visibility }}<small>km</small></div>
+            </div>
+
+            <div class="stat-card glass">
+                <div class="stat-icon-img">
+                    <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M18 10h-1.26A8 8 0 1 0 9 20h9a5 5 0 0 0 0-10z"/></svg>
+                </div>
+                <div class="stat-label">Clouds</div>
+                <div class="stat-value">{{ clouds }}<small>%</small></div>
+            </div>
+
+            <div class="stat-card glass">
+                <div class="stat-icon-img">
+                    <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><circle cx="12" cy="12" r="5"/><line x1="12" y1="1" x2="12" y2="3"/><line x1="12" y1="21" x2="12" y2="23"/><line x1="4.22" y1="4.22" x2="5.64" y2="5.64"/><line x1="18.36" y1="18.36" x2="19.78" y2="19.78"/><line x1="1" y1="12" x2="3" y2="12"/><line x1="21" y1="12" x2="23" y2="12"/><line x1="4.22" y1="19.78" x2="5.64" y2="18.36"/><line x1="18.36" y1="5.64" x2="19.78" y2="4.22"/></svg>
+                </div>
+                <div class="stat-label">Sunrise / Sunset</div>
+                <div class="stat-value">{{ sunrise }}</div>
+                <div class="stat-sub">Sunset {{ sunset }}</div>
+            </div>
+        </section>
+
+        <!-- Hourly Forecast Chart -->
+        <section class="forecast-card glass">
+            <div class="forecast-header">
+                <h2 class="forecast-title">Next 8 Hours</h2>
+                <p class="forecast-subtitle">Temperature &amp; humidity trends (live data)</p>
+            </div>
+
+            <div class="forecast-chart-wrapper">
+                <canvas id="forecastChart"></canvas>
+            </div>
+
+            <div class="forecast-pills">
+                {% for time_val, temp_val, hum_val in forecast_hours %}
+                <div class="hour-pill">
+                    <span class="hour-time">{{ time_val }}</span>
+                    <span class="hour-temp">{{ temp_val }}&deg;</span>
+                    <span class="hour-hum">{{ hum_val }}%</span>
+                </div>
+                {% endfor %}
+            </div>
+        </section>
+
+        <!-- Historical Trend Chart -->
+        {% if trend_times %}
+        <section class="trend-card glass">
+            <div class="forecast-header">
+                <h2 class="forecast-title">24-Hour Trend</h2>
+                <p class="forecast-subtitle">Temperature &amp; humidity over the last 24 hours</p>
+            </div>
+            <div class="trend-chart-wrapper">
+                <canvas id="trendChart"></canvas>
+            </div>
+        </section>
+        {% endif %}
+
+        <!-- Recommendations -->
+        {% if recommendations %}
+        <section class="recommend-card glass">
+            <h2 class="recommend-title">Today's Recommendations</h2>
+            <ul class="recommend-list">
+                {% for tip in recommendations %}
+                    <li class="recommend-item">{{ tip }}</li>
+                {% endfor %}
+            </ul>
+        </section>
+        {% endif %}
+
+        <!-- Footer -->
+        <footer class="app-footer">
+            <p>Day length: <strong>{{ day_length }} hours</strong></p>
+            <p class="footer-credit">Data: OpenWeatherMap &middot; Open-Meteo (365 days hourly)</p>
+        </footer>
+
+        <!-- JSON payload for chart -->
+        {{ forecast_times|json_script:"forecastTimes" }}
+        {{ forecast_temps|json_script:"forecastTemps" }}
+        {{ forecast_humidity|json_script:"forecastHumidity" }}
+
+        {{ trend_times|json_script:"trendTimes" }}
+        {{ trend_temps|json_script:"trendTemps" }}
+        {{ trend_humidities|json_script:"trendHumidities" }}
+        {{ trend_current_pos|json_script:"trendCurrentPos" }}
+
+        <!-- Map init for results page -->
+        <script>
+        (function() {
+            var mapEl = document.getElementById('weatherMap');
+            if (!mapEl || typeof L === 'undefined') return;
+            var lat = {{ lat }};
+            var lon = {{ lon }};
+            var map = L.map('weatherMap').setView([lat, lon], 11);
+            L.tileLayer('https://{s}.tile.openstreetmap.org/{z}/{x}/{y}.png', {
+                attribution: '&copy; OpenStreetMap contributors',
+                maxZoom: 18
+            }).addTo(map);
+            L.marker([lat, lon]).addTo(map)
+                .bindPopup('<strong>{{ location|escapejs }}</strong><br>{{ lat }}, {{ lon }}')
+                .openPopup();
+        })();
+        </script>
+
+        <script src="{% static 'js/chartSetup.js' %}"></script>
+        <script src="{% static 'js/trendChart.js' %}"></script>
+        {% else %}
+
+        <!-- Empty State -->
+        <section class="empty-state" id="empty-state">
+            <div class="empty-illustration">
+                <svg width="120" height="120" viewBox="0 0 120 120" fill="none">
+                    <circle cx="50" cy="60" r="22" fill="rgba(251,191,36,0.2)" stroke="rgba(251,191,36,0.5)" stroke-width="2"/>
+                    <path d="M80 55c0-8.3-6.7-15-15-15a15 15 0 0 0-14.5 11.2A12 12 0 0 0 38 63a12 12 0 0 0 12 12h28a10 10 0 0 0 0-20h-2" fill="rgba(148,163,184,0.2)" stroke="rgba(148,163,184,0.5)" stroke-width="2"/>
+                </svg>
+            </div>
+            <h2 class="empty-title" id="empty-title">Where are we looking today?</h2>
+            <p class="empty-text" id="empty-text">Enter any city above or click the location button to see real-time conditions and a 6-hour rain forecast powered by machine learning.</p>
+            <p class="empty-text">It also shows the 24-hour temperature and humidity trends.</p>
+        </section>
+
+        <!-- Empty-state map placeholder -->
+        <section class="map-card glass" id="emptyMapCard" style="display:none;">
+            <div class="map-header">
+                <h2 class="map-title">Your Location</h2>
+                <p class="map-subtitle" id="emptyMapSubtitle"></p>
+            </div>
+            <div id="emptyMap" class="weather-map"></div>
+        </section>
+        {% endif %}
+
+    </div>
+
+    <!-- Autocomplete + Geolocation + Form logic -->
+    <script>
+    (function() {
+        var cityInput = document.getElementById('cityInput');
+        var dropdown = document.getElementById('autocompleteDropdown');
+        var hiddenLat = document.getElementById('hiddenLat');
+        var hiddenLon = document.getElementById('hiddenLon');
+        var hiddenDisplay = document.getElementById('hiddenDisplayName');
+        var form = document.getElementById('weatherForm');
+        var geoBtn = document.getElementById('geolocateBtn');
+        var broadWarning = document.getElementById('broadWarning');
+        var broadWarningText = document.getElementById('broadWarningText');
+        var overlay = document.getElementById('loadingOverlay');
+
+        var debounceTimer = null;
+
+        function showLoading(msg) {
+            if (overlay) {
+                overlay.querySelector('.loading-text').textContent = msg || 'Fetching weather data...';
+                overlay.classList.add('active');
+            }
+        }
+
+        function hideLoading() {
+            if (overlay) overlay.classList.remove('active');
+        }
+
+        function clearCoords() {
+            hiddenLat.value = '';
+            hiddenLon.value = '';
+            hiddenDisplay.value = '';
+        }
+
+        // Autocomplete
+        cityInput.addEventListener('input', function() {
+            clearCoords();
+            if (broadWarning) broadWarning.style.display = 'none';
+            var q = cityInput.value.trim();
+            clearTimeout(debounceTimer);
+            if (q.length < 2) {
+                dropdown.innerHTML = '';
+                dropdown.style.display = 'none';
+                return;
+            }
+            debounceTimer = setTimeout(function() {
+                fetch('/api/locations/?q=' + encodeURIComponent(q))
+                    .then(function(r) { return r.json(); })
+                    .then(function(data) {
+                        if (!data || data.length === 0) {
+                            dropdown.innerHTML = '';
+                            dropdown.style.display = 'none';
+                            return;
+                        }
+                        var html = '';
+                        for (var i = 0; i < data.length; i++) {
+                            var item = data[i];
+                            html += '<div class="autocomplete-item" '
+                                + 'data-lat="' + item.lat + '" '
+                                + 'data-lon="' + item.lon + '" '
+                                + 'data-display="' + escapeAttr(item.display_name) + '" '
+                                + 'data-broad="' + (item.is_broad ? '1' : '0') + '">'
+                                + '<span class="ac-name">' + escapeHtml(item.name) + '</span>';
+                            if (item.state || item.country) {
+                                html += '<span class="ac-detail">';
+                                if (item.state) html += escapeHtml(item.state);
+                                if (item.state && item.country) html += ', ';
+                                if (item.country) html += escapeHtml(item.country);
+                                html += '</span>';
+                            }
+                            html += '</div>';
+                        }
+                        dropdown.innerHTML = html;
+                        dropdown.style.display = 'block';
+
+                        var items = dropdown.querySelectorAll('.autocomplete-item');
+                        for (var j = 0; j < items.length; j++) {
+                            items[j].addEventListener('click', selectSuggestion);
+                        }
+                    })
+                    .catch(function() {
+                        dropdown.innerHTML = '';
+                        dropdown.style.display = 'none';
+                    });
+            }, 300);
+        });
+
+        function selectSuggestion(e) {
+            var el = e.currentTarget;
+            var isBroad = el.getAttribute('data-broad') === '1';
+            var display = el.getAttribute('data-display');
+
+            if (isBroad) {
+                dropdown.innerHTML = '';
+                dropdown.style.display = 'none';
+                if (broadWarning) {
+                    broadWarningText.textContent = '"' + display + '" is too broad for accurate rain prediction. Please choose a specific city or area.';
+                    broadWarning.style.display = 'flex';
+                }
+                cityInput.value = '';
+                cityInput.focus();
+                return;
+            }
+
+            hiddenLat.value = el.getAttribute('data-lat');
+            hiddenLon.value = el.getAttribute('data-lon');
+            hiddenDisplay.value = display;
+            cityInput.value = display;
+            dropdown.innerHTML = '';
+            dropdown.style.display = 'none';
+            if (broadWarning) broadWarning.style.display = 'none';
+            showLoading('Fetching weather for ' + display + '...');
+            form.submit();
+        }
+
+        // Close dropdown on outside click
+        document.addEventListener('click', function(e) {
+            if (!e.target.closest('.search-input-container')) {
+                dropdown.innerHTML = '';
+                dropdown.style.display = 'none';
+            }
+        });
+
+        // Geolocation button
+        if (geoBtn) {
+            geoBtn.addEventListener('click', function() {
+                if (!navigator.geolocation) {
+                    alert('Geolocation is not supported by your browser.');
+                    return;
+                }
+                geoBtn.classList.add('locating');
+                showLoading('Detecting your location...');
+
+                navigator.geolocation.getCurrentPosition(
+                    function(pos) {
+                        var lat = pos.coords.latitude;
+                        var lon = pos.coords.longitude;
+                        hiddenLat.value = lat;
+                        hiddenLon.value = lon;
+                        hiddenDisplay.value = '';
+                        cityInput.value = '';
+                        showLoading('Loading weather for your location...');
+                        form.submit();
+                    },
+                    function(err) {
+                        geoBtn.classList.remove('locating');
+                        hideLoading();
+                        if (err.code === 1) {
+                            showGeoError('Location permission denied. Please search manually or allow location access in your browser settings.');
+                        } else if (err.code === 2) {
+                            showGeoError('Unable to determine your location. Please try searching manually.');
+                        } else {
+                            showGeoError('Location request timed out. Please try again or search manually.');
+                        }
+                    },
+                    { timeout: 10000, enableHighAccuracy: true }
+                );
+            });
+        }
+
+        function showGeoError(msg) {
+            var existing = document.querySelector('.geo-error-banner');
+            if (existing) existing.remove();
+            var banner = document.createElement('div');
+            banner.className = 'error-banner geo-error-banner';
+            banner.innerHTML = '<span class="error-icon">!</span><span>' + escapeHtml(msg) + '</span>';
+            var section = document.querySelector('.search-section');
+            if (section) section.appendChild(banner);
+            setTimeout(function() { banner.remove(); }, 8000);
+        }
+
+        // Show loading on normal form submit
+        form.addEventListener('submit', function() {
+            var city = cityInput.value.trim();
+            var lat = hiddenLat.value;
+            if (city || lat) {
+                showLoading('Fetching weather data...');
+            }
+        });
+
+        function escapeHtml(s) {
+            var d = document.createElement('div');
+            d.textContent = s;
+            return d.innerHTML;
+        }
+
+        function escapeAttr(s) {
+            return s.replace(/&/g,'&amp;').replace(/"/g,'&quot;').replace(/'/g,'&#39;').replace(/</g,'&lt;').replace(/>/g,'&gt;');
+        }
+    })();
+    </script>
+
+</body>
+</html>
