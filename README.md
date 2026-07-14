@@ -369,14 +369,13 @@ Visitor logs are available under **Site Visitors**.
 
 # Author
 
-**Oluwaferanmi Caleb**
-
+### Sado Osimeozemeokhai
 Computer Engineer • Machine Learning Enthusiast • Software Developer
 
-GitHub: https://github.com/Oluwaferanmi-Dev
+**GitHub Repository:** https://github.com/OsimeSado
 
----
+### Bryan Aghogho
+• Software Developer
 
-## ⭐ Support
+**GitHub Repository:** https://github.com/JeedyWhyte
 
-If you found this project useful, consider giving it a ⭐ on GitHub!
